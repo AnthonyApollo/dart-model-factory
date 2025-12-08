@@ -3,8 +3,6 @@
 A lightweight and powerful code generator that creates **factory classes** for your Dart/Flutter models.
 The generated factories make it easy to create fake or partially-customized instances of your classes — ideal for **unit tests**, **widget tests**, and **mock data scenarios**.
 
----
-
 # 📚 **Index**
 
 * [🚀 What does this package do?](#-what-does-this-package-do)
@@ -15,8 +13,6 @@ The generated factories make it easy to create fake or partially-customized inst
 * [🧭 Roadmap](#-roadmap-future-features)
 * [❤️ Contributions](#️-contributions)
 * [📄 License](#-license)
-
----
 
 ## 🚀 **What does this package do?**
 
@@ -40,8 +36,6 @@ The package (via `build_runner`) automatically generates:
   * nullable fields
   * nested models (must also be annotated with `@ModelFactory`)
 
----
-
 ### 🔗 Nested Models (auto-generated)
 
 Factories cascade automatically through nested models:
@@ -51,15 +45,11 @@ OrderFactory.build()
 // → Order(customer: CustomerFactory.build(), ...)
 ```
 
----
-
 ### 🎯 Nullable Fields (smart defaults)
 
 * `T?` → defaults to **null**
 * `T`  → defaults to a fake predefined value
 * Override any field manually in `build()` as needed.
-
----
 
 ### 🏗️ Supported Fake Values
 
@@ -74,8 +64,6 @@ OrderFactory.build()
 | `T?`         | `null`               |
 | Custom model | `TFactory.build()`   |
 
----
-
 ## ⚙️ **Why use model_factory?**
 
 * ✔ Eliminates boilerplate in tests and mock data scenarios
@@ -84,8 +72,6 @@ OrderFactory.build()
 * ✔ Makes tests more readable and expressive
 * ✔ Zero runtime dependencies — everything is generated at build time
 * ✔ No reflection, no dynamic magic, fully type-safe
-
----
 
 ## 🧩 **Usage**
 
@@ -133,8 +119,6 @@ Or with overrides:
 UserFactory.build(id: 123);
 ```
 
----
-
 ## 🧪 **Perfect for Unit Tests**
 
 Instead of manually constructing dummy objects:
@@ -163,8 +147,6 @@ final user = UserFactory.build(name: "Alice");
 
 This keeps tests clean, readable, and focused.
 
----
-
 ## 🟣 **Mock Data Scenarios**
 
 This package is ideal for UI libraries that expect real model shapes for placeholder rendering:
@@ -185,22 +167,16 @@ Skeletonizer(
 );
 ```
 
----
-
 ## 🧭 **Roadmap (future features)**
 
 Potential enhancements:
 
 * Custom default values
 
----
-
 ## ❤️ **Contributions**
 
 Feedback, suggestions, and pull requests are welcome!
 Feel free to open an issue.
-
----
 
 ## 📄 **License**
 
