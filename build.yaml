@@ -1,0 +1,15 @@
+targets:
+  $default:
+    builders:
+      model_factory|model_factory_generator:
+        generate_for:
+          include:
+            - lib/**.dart
+
+builders:
+  model_factory_generator:
+    import: "package:model_factory/src/model_factory_builder.dart"
+    builder_factories: ["modelFactoryBuilder"]
+    build_extensions: {".dart": [".factory.g.dart"]}
+    auto_apply: dependents
+    build_to: source
