@@ -9,7 +9,7 @@ The generated factories make it easy to create fake or partially-customized inst
 * [⚙️ Why use model_factory?](#️-why-use-model_factory)
 * [🧩 Usage](#-usage)
 * [🧪 Perfect for Unit Tests](#-perfect-for-unit-tests)
-* [🟣 Mock Data Scenarios](#-mock-data--skeleton-loading-eg-skeletonizer)
+* [🟣 Mock Data Scenarios](#-mock-data-scenarios)
 * [🧭 Roadmap](#-roadmap-future-features)
 * [❤️ Contributions](#️-contributions)
 * [📄 License](#-license)
@@ -55,7 +55,7 @@ OrderFactory.build()
 
 | Type         | Generated Fake Value |
 | ------------ | -------------------- |
-| `String`     | `'abc'`              |
+| `String`     | `''`              |
 | `int`        | `0`                  |
 | `double`     | `0.0`                |
 | `bool`       | `false`              |
@@ -119,6 +119,46 @@ Or with overrides:
 UserFactory.build(id: 123);
 ```
 
+### 🔧 **(Optional) Configuring Custom Default Values via `build.yaml`**
+
+You can override the generated fake values **without modifying the library**, using your project's `build.yaml`.
+
+Add the following structure in the **consumer app**:
+
+```yaml
+targets:
+  $default:
+    builders:
+      model_factory|model_factory_generator:
+        options:
+          type_defaults:
+            String: "'Lorem ipsum'"
+            int: '42'
+            double: '3.14'
+            bool: 'true'
+            DateTime: 'DateTime(2024, 01, 01)'
+            UserRole: 'UserRole.admin'
+```
+
+Effects:
+
+```dart
+final user = UserFactory.build();
+// name -> 'Lorem ipsum'
+// id   -> 42
+// email -> null (nullable fields stay null)
+```
+
+Custom types (enums, models, lists, etc.) can also be configured:
+
+```yaml
+type_defaults:
+  UserRole: 'UserRole.manager'
+  List<String>: "['A', 'B', 'C']"
+```
+
+If a type is **not** configured, the default fallback values are used.
+
 ## 🧪 **Perfect for Unit Tests**
 
 Instead of manually constructing dummy objects:
@@ -145,7 +185,7 @@ Or customize only what matters:
 final user = UserFactory.build(name: "Alice");
 ```
 
-This keeps tests clean, readable, and focused.
+Clean, maintainable, expressive.
 
 ## 🟣 **Mock Data Scenarios**
 
@@ -166,12 +206,6 @@ Skeletonizer(
   ),
 );
 ```
-
-## 🧭 **Roadmap (future features)**
-
-Potential enhancements:
-
-* Custom default values
 
 ## ❤️ **Contributions**
 
