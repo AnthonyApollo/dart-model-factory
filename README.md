@@ -121,9 +121,7 @@ UserFactory.build(id: 123);
 
 ### 🔧 **(Optional) Configuring Custom Default Values via `build.yaml`**
 
-You can override the generated fake values **without modifying the library**, using your project's `build.yaml`.
-
-Add the following structure in the **consumer app**:
+You can override the generated fake values by adding the following structure to your project's `build.yaml`:
 
 ```yaml
 targets:
