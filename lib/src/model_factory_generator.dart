@@ -10,11 +10,10 @@ import 'package:model_factory/model_factory_annotation.dart';
 
 class ModelFactoryGenerator extends GeneratorForAnnotation<ModelFactory> {
   ModelFactoryGenerator([Map<String, dynamic>? config])
-      : _typeDefaults = _parseTypeDefaults(config);
+      : _globalDefaults = _parseTypeDefaults(config);
 
-  /// Map from type name (e.g. "String", "int", "DateTime") to Dart code
-  /// string to use as default (e.g. "'foo'", "42", "DateTime(2020, 1, 1)").
-  final Map<String, String> _typeDefaults;
+  /// Defaults from build.yaml (per type, e.g. "String", "int", "DateTime")
+  final Map<String, String> _globalDefaults;
 
   @override
   FutureOr<String> generateForAnnotatedElement(
@@ -24,7 +23,7 @@ class ModelFactoryGenerator extends GeneratorForAnnotation<ModelFactory> {
   ) {
     if (element is! ClassElement) {
       throw InvalidGenerationSourceError(
-        '@ModelFactory/@modelFactory can only be used in classes.',
+        '@ModelFactory can only be used on classes',
         element: element,
       );
     }
@@ -32,6 +31,9 @@ class ModelFactoryGenerator extends GeneratorForAnnotation<ModelFactory> {
     final classElement = element;
     final className = classElement.displayName;
     final factoryName = '${className}Factory';
+
+    // CLASS-LEVEL DEFAULTS: @ModelFactory(defaults: { 'field': 'code' })
+    final classDefaults = _parseClassDefaults(annotation);
 
     final buffer = StringBuffer();
 
@@ -44,16 +46,17 @@ class ModelFactoryGenerator extends GeneratorForAnnotation<ModelFactory> {
     for (final field in classElement.fields) {
       if (field.isStatic || field.isSynthetic || field.isPrivate) continue;
 
-      final String? fieldName = field.name;
-      if (fieldName == null || fieldName.isEmpty) continue;
+      final String fieldName = field.name ?? '';
+      if (fieldName.isEmpty) continue;
 
       final DartType type = field.type;
 
       final typeStrNonNull = type.getDisplayString(withNullability: false);
       final paramType = '$typeStrNonNull?';
-
-      final fakeCode = _fakeValueForType(type);
       final isNullable = type.nullabilitySuffix == NullabilitySuffix.question;
+
+      final fakeCode =
+          _resolveFakeValue(field, type, classDefaults, _globalDefaults);
 
       fields.add(
         _FieldInfo(
@@ -72,17 +75,15 @@ class ModelFactoryGenerator extends GeneratorForAnnotation<ModelFactory> {
     buffer.writeln('  }) {');
 
     buffer.writeln('    return $className(');
-
     for (final f in fields) {
       if (f.isNullable) {
-        // Nullable → use parameter as-is (default null)
+        // Nullable → usa diretamente o parâmetro (default null)
         buffer.writeln('      ${f.name}: ${f.name},');
       } else {
-        // Non-nullable → parameter or fake default
+        // Non-nullable → parâmetro ou fake default
         buffer.writeln('      ${f.name}: ${f.name} ?? ${f.fakeCode},');
       }
     }
-
     buffer.writeln('    );');
     buffer.writeln('  }');
 
@@ -91,37 +92,47 @@ class ModelFactoryGenerator extends GeneratorForAnnotation<ModelFactory> {
     return buffer.toString();
   }
 
-  /// Decide fake value for a given type, considering:
-  /// 1. Override from build.yaml (if configured)
-  /// 2. Built-in defaults (String, int, double, bool, DateTime, enums, lists)
-  /// 3. Nested model factory (TypeFactory.build())
-  String _fakeValueForType(DartType type) {
-    // If nullable, just return null (only used when param is not provided)
+  // ----------------------------------------------------------
+  // RESOLUTION PRIORITY
+  // field annotation → class defaults → build.yaml → built-in → nested model
+  // ----------------------------------------------------------
+
+  String _resolveFakeValue(
+    FieldElement field,
+    DartType type,
+    Map<String, String> classDefaults,
+    Map<String, String> globalDefaults,
+  ) {
+    final typeStr = type.getDisplayString(withNullability: false);
+
+    // 1) FIELD-LEVEL DEFAULT VIA @FactoryDefault
+    final fieldDefault = _readFieldAnnotationDefault(field);
+    if (fieldDefault != null) return fieldDefault;
+
+    // 2) CLASS-LEVEL DEFAULT VIA @ModelFactory(defaults: {...})
+    final classDefault = classDefaults[field.name];
+    if (classDefault != null) return classDefault;
+
+    // 3) GLOBAL DEFAULT VIA build.yaml
+    final global = globalDefaults[typeStr];
+    if (global != null) return global;
+
+    // 4) Built-in defaults
     if (type.nullabilitySuffix == NullabilitySuffix.question) {
       return 'null';
     }
 
-    final typeStr = type.getDisplayString(withNullability: false);
-
-    // 1) Check overrides from build.yaml
-    final override = _typeDefaults[typeStr];
-    if (override != null) {
-      // We assume the user provided a valid Dart expression
-      return override;
-    }
-
     final element = type.element;
 
-    // ENUMS → first case
+    // Enums → first case
     if (element is EnumElement) {
-      final enumConstants =
-          element.fields.where((f) => f.isEnumConstant).toList();
-      if (enumConstants.isNotEmpty) {
-        return '$typeStr.${enumConstants.first.name}';
+      final constants = element.fields.where((f) => f.isEnumConstant).toList();
+      if (constants.isNotEmpty) {
+        return '$typeStr.${constants.first.name}';
       }
     }
 
-    // Built-in primitives
+    // Primitives
     if (typeStr == 'String') return "''";
     if (typeStr == 'int') return '0';
     if (typeStr == 'double') return '0.0';
@@ -129,37 +140,89 @@ class ModelFactoryGenerator extends GeneratorForAnnotation<ModelFactory> {
     if (typeStr == 'bool') return 'false';
     if (typeStr == 'DateTime') return 'DateTime(2000, 1, 1)';
 
-    // List<T>
+    // Lists
     if (type is ParameterizedType &&
         typeStr.startsWith('List<') &&
         typeStr.endsWith('>') &&
         type.typeArguments.isNotEmpty) {
-      // First, check if there's a direct override for List<Something>
-      final listOverride = _typeDefaults[typeStr];
-      if (listOverride != null) {
-        return listOverride;
-      }
-
-      // Otherwise, generate based on inner type
-      final innerFake = _fakeValueForType(type.typeArguments.first);
+      final innerFake = _resolveFakeValue(
+        field,
+        type.typeArguments.first,
+        classDefaults,
+        globalDefaults,
+      );
       return '[$innerFake]';
     }
 
-    // Fallback: assume another @ModelFactory model
+    // Fallback → nested model factory
     return '${typeStr}Factory.build()';
   }
 
-  /// Reads user configuration from build.yaml.
-  ///
-  /// Expected format:
-  /// builders:
-  ///   model_factory|model_factory:
-  ///     options:
-  ///       defaults:
-  ///         String: "'my default'"
-  ///         int: "42"
-  ///         DateTime: "DateTime(2020, 1, 1)"
-  static Map<String, String> _parseTypeDefaults(Map<String, dynamic>? config) {
+  // ----------------------------------------------------------
+  // FIELD-LEVEL ANNOTATION @FactoryDefault("...")
+  // ----------------------------------------------------------
+
+  String? _readFieldAnnotationDefault(FieldElement field) {
+    final dynamic rawMetadata = field.metadata;
+
+    Iterable<dynamic> annotations;
+
+    if (rawMetadata is Iterable) {
+      annotations = rawMetadata;
+    } else {
+      final dynamic maybeAnnotations = (rawMetadata as dynamic).annotations;
+      if (maybeAnnotations is Iterable) {
+        annotations = maybeAnnotations;
+      } else {
+        return null;
+      }
+    }
+
+    for (final ann in annotations) {
+      final value = (ann as dynamic).computeConstantValue();
+      if (value == null) continue;
+
+      final typeName = value.type?.element?.name;
+      if (typeName == 'FactoryDefault') {
+        final code = value.getField('code')?.toStringValue();
+        if (code != null) {
+          return code;
+        }
+      }
+    }
+    return null;
+  }
+
+  // ----------------------------------------------------------
+  // CLASS-LEVEL @ModelFactory(defaults: {...})
+  // ----------------------------------------------------------
+
+  Map<String, String> _parseClassDefaults(ConstantReader annotation) {
+    final defaultsReader = annotation.peek('defaults');
+    if (defaultsReader == null || defaultsReader.isNull) {
+      return {};
+    }
+
+    final result = <String, String>{};
+
+    defaultsReader.mapValue.forEach((key, value) {
+      final k = key?.toStringValue();
+      final v = value?.toStringValue();
+      if (k != null && v != null) {
+        result[k] = v;
+      }
+    });
+
+    return result;
+  }
+
+  // ----------------------------------------------------------
+  // GLOBAL DEFAULTS (build.yaml)
+  // ----------------------------------------------------------
+
+  static Map<String, String> _parseTypeDefaults(
+    Map<String, dynamic>? config,
+  ) {
     final result = <String, String>{};
 
     final defaults = config?['defaults'];

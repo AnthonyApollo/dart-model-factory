@@ -25,8 +25,9 @@ When you annotate a class with:
 The package (via `build_runner`) automatically generates:
 
 * A `<ClassName>Factory` class
-* A static `build()` method with optional parameters for each field in the model
-* Default **fake values** for:
+* A static `build()` method
+* Optional parameters for every field
+* Automatic fake values for:
 
   * strings
   * numbers
@@ -38,8 +39,6 @@ The package (via `build_runner`) automatically generates:
 
 ### 🔗 Nested Models (auto-generated)
 
-Factories cascade automatically through nested models:
-
 ```dart
 OrderFactory.build()
 // → Order(customer: CustomerFactory.build(), ...)
@@ -48,30 +47,30 @@ OrderFactory.build()
 ### 🎯 Nullable Fields (smart defaults)
 
 * `T?` → defaults to **null**
-* `T`  → defaults to a fake predefined value
-* Override any field manually in `build()` as needed.
+* `T`  → defaults to fake predefined value
+* All values can be overridden when calling `build()`
 
 ### 🏗️ Supported Fake Values
 
 | Type         | Generated Fake Value |
 | ------------ | -------------------- |
-| `String`     | `''`              |
+| `String`     | `''`                 |
 | `int`        | `0`                  |
 | `double`     | `0.0`                |
 | `bool`       | `false`              |
-| `enum`       | first case           |
+| `enum`       | first enum case      |
 | `List<T>`    | `[fakeValue]`        |
 | `T?`         | `null`               |
-| Custom model | `TFactory.build()`   |
+| Custom model | `<T>Factory.build()` |
 
 ## ⚙️ **Why use model_factory?**
 
-* ✔ Eliminates boilerplate in tests and mock data scenarios
-* ✔ Reduces maintenance when models change
-* ✔ Automatically generates default values
-* ✔ Makes tests more readable and expressive
-* ✔ Zero runtime dependencies — everything is generated at build time
-* ✔ No reflection, no dynamic magic, fully type-safe
+* ✔ Removes boilerplate from tests
+* ✔ Keeps tests clean and expressive
+* ✔ Automatically updates when your models change
+* ✔ Works with nested models
+* ✔ Fully type-safe — no runtime reflection
+* ✔ Zero runtime cost (everything generated at build time)
 
 ## 🧩 **Usage**
 
@@ -106,22 +105,94 @@ class User {
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-This generates:
+Generated factory:
 
 ```dart
 UserFactory.build();
-// → User(id: 0, name: 'abc', email: null)
+// → User(id: 0, name: '', email: null)
 ```
 
-Or with overrides:
+Override only what you need:
 
 ```dart
-UserFactory.build(id: 123);
+UserFactory.build(id: 100);
 ```
 
-### 🔧 **(Optional) Configuring Custom Default Values via `build.yaml`**
+### 🔧 **Configuring Custom Default Values**
 
-You can override the generated fake values by adding the following structure to your project's `build.yaml`:
+Model Factory allows **three levels** of configuration.
+The priority order is:
+
+> **Field > Class > Global > Built-in defaults**
+
+Meaning:
+
+1. `@FactoryDefault` overrides everything
+2. `@ModelFactory(defaults: {...})` overrides global defaults
+3. `build.yaml` overrides built-in defaults
+4. Built-in defaults are used only if nothing else is configured
+
+#### **(1) Field-Level Defaults — `@FactoryDefault`**
+
+This annotation lets you set a custom default **for one specific field**:
+
+```dart
+class User {
+  @FactoryDefault("'Admin'")
+  final String role;
+
+  @FactoryDefault('21')
+  final int age;
+
+  final String name;
+
+  const User({
+    required this.role,
+    required this.age,
+    required this.name,
+  });
+}
+```
+
+Result:
+
+```dart
+UserFactory.build();
+// role → 'Admin'
+// age  → 21
+// name → '' (or overridden by other configuration)
+```
+
+**Highest priority.**
+
+#### **(2) Class-Level Defaults — `@ModelFactory(defaults: {...})`**
+
+You can define per-field defaults at the class annotation:
+
+```dart
+@ModelFactory(
+  defaults: {
+    'id': '999',
+    'name': "'John Doe'",
+  },
+)
+class User { ... }
+```
+
+These override global defaults and built-in defaults, but are overridden by `@FactoryDefault`.
+
+Example:
+
+```dart
+UserFactory.build();
+// id   → 999
+// name → 'John Doe'
+// email → null
+```
+
+#### **(3) Global Defaults — via `build.yaml`**
+
+Configure defaults **per type**, affecting your entire project.
 
 ```yaml
 targets:
@@ -134,28 +205,19 @@ targets:
             int: '42'
             double: '3.14'
             bool: 'true'
-            DateTime: 'DateTime(2024, 01, 01)'
+            DateTime: 'DateTime(2024, 1, 1)'
             UserRole: 'UserRole.admin'
+            List<String>: "['A', 'B', 'C']"
 ```
 
-Effects:
+Result:
 
 ```dart
-final user = UserFactory.build();
-// name -> 'Lorem ipsum'
-// id   -> 42
-// email -> null (nullable fields stay null)
+UserFactory.build();
+// name  → 'Lorem ipsum'
+// id    → 42
+// email → null
 ```
-
-Custom types (enums, models, lists, etc.) can also be configured:
-
-```yaml
-defaults:
-  UserRole: 'UserRole.manager'
-  List<String>: "['A', 'B', 'C']"
-```
-
-If a type is **not** configured, the default fallback values are used.
 
 ## 🧪 **Perfect for Unit Tests**
 
@@ -166,7 +228,7 @@ Instead of manually constructing dummy objects:
 ```dart
 final user = User(
   id: 1,
-  name: 'John Doe',
+  name: 'John',
   email: null,
 );
 ```
@@ -180,20 +242,20 @@ final user = UserFactory.build();
 Or customize only what matters:
 
 ```dart
-final user = UserFactory.build(name: "Alice");
+final user = UserFactory.build(name: 'Alice');
 ```
 
 Clean, maintainable, expressive.
 
 ## 🟣 **Mock Data Scenarios**
 
-This package is ideal for UI libraries that expect real model shapes for placeholder rendering:
+`model_factory` is ideal for UI libraries that require *real model shapes*, such as:
 
 * skeletonizer
-* shimmer-based skeletons
-* loading placeholders
-* preview UIs
-* prototyping flows
+* shimmer placeholders
+* loading previews
+* prototype UIs
+* list placeholders
 
 Example:
 
