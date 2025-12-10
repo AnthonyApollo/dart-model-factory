@@ -129,7 +129,7 @@ targets:
     builders:
       model_factory|model_factory_generator:
         options:
-          type_defaults:
+          defaults:
             String: "'Lorem ipsum'"
             int: '42'
             double: '3.14'
@@ -150,7 +150,7 @@ final user = UserFactory.build();
 Custom types (enums, models, lists, etc.) can also be configured:
 
 ```yaml
-type_defaults:
+defaults:
   UserRole: 'UserRole.manager'
   List<String>: "['A', 'B', 'C']"
 ```
